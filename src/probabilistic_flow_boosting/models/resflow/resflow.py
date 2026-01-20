@@ -164,19 +164,19 @@ class ResFlow(pl.LightningModule):
     def forward(self, y, x_cont_enc):
         """Calculate the log probability of the model (batch). Method used only for training and validation."""
         c = self.base_model(x_cont_enc) 
-        loss = self.flow_model(c).log_prob(y) 
-        loss += np.log(np.abs(np.prod(self.trainer.datamodule.target_scaler.scale_)))
-        return loss
+        log_prob = self.flow_model(c).log_prob(y) 
+        log_prob += np.log(np.abs(np.prod(self.trainer.datamodule.target_scaler.scale_)))
+        return log_prob
 
     @torch.enable_grad()
     def _log_prob(self, y, x_cont_enc):
         """Calculate the log probability of the model (batch). Method used only for testing."""
         grad_x = x_cont_enc.clone().requires_grad_()
         c = self.base_model(grad_x)
-        loss = self.flow_model(c).log_prob(y)
-        loss += np.log(np.abs(np.prod(
+        log_prob = self.flow_model(c).log_prob(y)
+        log_prob += np.log(np.abs(np.prod(
             self.trainer.datamodule.target_scaler.scale_)))  # Target scaling correction. log(abs(det(jacobian)))
-        return loss
+        return log_prob
 
     def training_step(self, batch, batch_idx):
         X, y = batch

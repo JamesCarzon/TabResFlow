@@ -217,6 +217,69 @@ class ResFlow(pl.LightningModule):
         self.log("test_nll", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
+    def _embed_features(self, X: torch.Tensor) -> torch.Tensor:
+        """Embed raw input features using the base model's continuous embeddings.
+
+        Args:
+            X: Raw input features of shape (batch_size, input_dim).
+
+        Returns:
+            Embedded features of shape (batch_size, input_dim, dim).
+        """
+        con_mask = torch.ones_like(X).long()
+        return embed_data_mask_mlp_cont(X, con_mask, self.base_model)
+
+    @torch.enable_grad()
+    def _get_distribution(self, x_cont_enc: torch.Tensor):
+        """Get the conditioned normalizing flow distribution for embedded features.
+
+        Args:
+            x_cont_enc: Embedded input features of shape (batch_size, input_dim, dim).
+
+        Returns:
+            A ``zuko.distributions.NormalizingFlow`` conditioned on the given features.
+        """
+        grad_x = x_cont_enc.clone().requires_grad_()
+        c = self.base_model(grad_x)
+        return self.flow_model(c)
+
+    @torch.enable_grad()
+    def cdf(self, y: torch.Tensor, X: torch.Tensor) -> torch.Tensor:
+        """Compute CDF values P(Y <= y | X=x) for each (y, x) pair.
+
+        Uses the forward (normalizing) pass of the flow to map observations into
+        the standard-Normal base space, then evaluates the Normal CDF there.
+
+        Args:
+            y: Target values of shape (batch_size, 1) in the model's scaled space.
+            X: Raw input features of shape (batch_size, input_dim).
+
+        Returns:
+            CDF values of shape (batch_size, 1), each in [0, 1].
+        """
+        dist = self._get_distribution(self._embed_features(X))
+        z = dist.transform.inv(y)
+        return dist.base.base_dist.cdf(z)
+
+    @torch.enable_grad()
+    def quantile(self, q: torch.Tensor, X: torch.Tensor) -> torch.Tensor:
+        """Compute quantile values y such that P(Y <= y | X=x) = q.
+
+        Uses the inverse (generative) pass of the flow: maps quantile levels
+        through the base Normal inverse CDF, then through the generative
+        transform back to the data space.
+
+        Args:
+            q: Quantile levels of shape (batch_size, 1), with values in (0, 1).
+            X: Raw input features of shape (batch_size, input_dim).
+
+        Returns:
+            Quantile values of shape (batch_size, 1) in the model's scaled space.
+        """
+        dist = self._get_distribution(self._embed_features(X))
+        z = dist.base.base_dist.icdf(q)
+        return dist.transform(z)
+
     @torch.enable_grad()
     def _sample(self, X: torch.Tensor, num_samples: int) -> torch.Tensor:
         grad_x = X.clone().requires_grad_()

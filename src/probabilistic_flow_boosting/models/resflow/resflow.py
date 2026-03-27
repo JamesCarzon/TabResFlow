@@ -19,7 +19,7 @@ import zuko
 import pdb
 from probabilistic_flow_boosting.models.resflow.augmentations import embed_data_mask_mlp, embed_data_mask_mlp_cont
 from probabilistic_flow_boosting.models.resflow.model import ResNetModel
-from probabilistic_flow_boosting.models.node.activations import sparsemax, sparsemoid
+# from probabilistic_flow_boosting.models.node.activations import sparsemax, sparsemoid
 
 
 class ResFlowDataModule(pl.LightningDataModule):
